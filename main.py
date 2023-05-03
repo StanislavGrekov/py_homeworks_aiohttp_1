@@ -1,37 +1,72 @@
 # This is a sample Python script.
+import json
 import asyncpg
 import asyncio
 import aiohttp
 import time
 from asyncio import run
 from pprint import pprint
-from models import Base, Weather_data, Session, engine
+from sqlalchemy.exc import IntegrityError
+from models import Base, Weather, Session, engine, Users
 from aiohttp import web
+from bcrypt import hashpw, gensalt, checkpw
+
+
+async  def orm_context(app):
+    print("START")
+    async with engine.begin() as con:
+        await con.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+    print("SHUT DOWN")
+
+
+@web.middleware
+async def session_middleware(request: web.Request, handler):
+    async with Session() as session:
+        request['session'] = session
+        response = await handler(request)
+        return response
 
 
 app = web.Application()
+app.cleanup_ctx.append(orm_context)
+app.middlewares.append(session_middleware)
 
 
+
+def hash_password(password):
+    password = password.encode()
+    password = hashpw(password, salt=gensalt())
+    password = password.decode()
+
+    return password
+
+
+async def get_user(user_id, session):
+    user = await session.get(Users, user_id)
+    if user is None:
+        raise web.HTTPNotFound(
+            text=json.dumps({'answer': 'Пользователь не найден'}),
+            content_type='application/json'
+        )
+    return user
 
 async def get_weather(city, key):
-
-    # С использованием ассинхронного менеджера контекста
     async with aiohttp.ClientSession() as client:
         response = await client.get(f'http://api.openweathermap.org/data/2.5/weather', params = {'q': city, 'APPID': key})
         json_data = await response.json()
-        print(f'{city}: {json_data["weather"][0]["main"]}')
+        temp_degree = round((json_data["main"]["temp"] - 273), 1)
+        #print(f'{city}: {json_data["weather"][0]["main"]}, температура - {round(temp_degree, 1)}')
 
-        #return json_data
-        return city, json_data["weather"][0]["main"]
-        # return json_data['name'], json_data["weather"][0]["main"]
-
+        return city, json_data["weather"][0]["main"], temp_degree
 
 
 async def paste_to_db(json_data):
     async with Session() as session:
         print(json_data)
         for element in json_data:
-            orm_date = Weather_data(json=element)
+            orm_date = Weather(json=element)
             session.add(orm_date)
         await session.commit()
 
@@ -39,21 +74,19 @@ async def paste_to_db(json_data):
 tasks = []
 async def main(cities, key):
 
-    async with engine.begin() as con:
-        await con.run_sync(Base.metadata.create_all)
-
     # Вставка в базу данных
     cities_coros = []
     for city in cities:
         cities_coros.append(get_weather(city, key))
     result = await asyncio.gather(*cities_coros)
+    pprint(result)
 
-    paste_to_db_coros = paste_to_db(result)
-    task = asyncio.create_task(paste_to_db_coros)
-    tasks.append(task)
-
-    for task in tasks:
-        await task
+    # paste_to_db_coros = paste_to_db(result)
+    # task = asyncio.create_task(paste_to_db_coros)
+    # tasks.append(task)
+    #
+    # for task in tasks:
+    #     await task
 
     # await paste_to_db(result)
 
@@ -63,12 +96,12 @@ class WeatherView(web.View):
     async def get(self):
         pass
     async def post(self):
-        user_data = await self.request.json()
-        cities = user_data['cities']
-        key =  user_data['APPID']
+        weather_data = await self.request.json()
+        cities = weather_data['cities']
+        key =  weather_data['APPID']
         await main(cities, key)
 
-        return web.json_response({'hellow': 'test'})
+        return web.json_response({'answer': 'test'})
 
     async def patch(self):
         pass
@@ -77,9 +110,51 @@ class WeatherView(web.View):
         pass
 
 
+class UserView(web.View):
+
+    @property
+    def session(self):
+        return self.request['session']
+
+    @property
+    def user_id(self):
+        return int(self.request.match_info['user_id'])
+
+    async def get(self):
+        user = await get_user(self.user_id, self.session)
+        return web.json_response({'answer': f'Пользователь {user.last_name} {user.first_name} зарегистрирован {user.registration_date}!'})
+
+    async def post(self):
+        user_data = await self.request.json()
+        user_data['password'] = hash_password(user_data['password'])
+        user = Users(**user_data)
+        self.request['session'].add(user)
+        try:
+            await self.request['session'].commit()
+        except IntegrityError as er:
+            raise web.HTTPConflict(
+                text = json.dumps({'answer': 'Пользователь с таким почтовым ящиком уже создан'}),
+                content_type = 'application/json'
+            )
+        return web.json_response({'answer': f'Пользователь {user.last_name} зарегистрирован!'})
+
+    async def patch(self):
+        json_data = await self.request.json()
+        print(json_data)
+
+        return web.json_response({'answer': 'answer'})
+
+
 app.add_routes([
-    web.get('/weather/', WeatherView),
     web.post('/weather/', WeatherView),
+    web.patch('/weather/', WeatherView),
+
+    web.post('/user/', UserView),
+    web.get(r'/user/{user_id:\d+}', UserView),
+    web.patch(r'/user/{user_id:\d+}', UserView),
+    web.delete(r'/user/{user_id:\d+}', UserView),
+
+
 ])
 
 web.run_app(app)
