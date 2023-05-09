@@ -7,12 +7,13 @@ import time
 from asyncio import run
 from pprint import pprint
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.future import select
 from models import Base, Weather, Session, engine, Users
 from aiohttp import web
 from bcrypt import hashpw, gensalt, checkpw
+from typing import Type
 
-
-async  def orm_context(app):
+async def orm_context(app):
     print("START")
     async with engine.begin() as con:
         await con.run_sync(Base.metadata.create_all)
@@ -52,56 +53,79 @@ async def get_user(user_id, session):
         )
     return user
 
+
+async def validate(old_password, user_password):
+    if checkpw(old_password.encode(), user_password.encode()):
+        return True
+    else:
+        return False
+
+
 async def get_weather(city, key):
     async with aiohttp.ClientSession() as client:
         response = await client.get(f'http://api.openweathermap.org/data/2.5/weather', params = {'q': city, 'APPID': key})
         json_data = await response.json()
         temp_degree = round((json_data["main"]["temp"] - 273), 1)
-        #print(f'{city}: {json_data["weather"][0]["main"]}, температура - {round(temp_degree, 1)}')
+        # print(f'{city}: {json_data["weather"][0]["main"]}, температура - {round(temp_degree, 1)}')
 
         return city, json_data["weather"][0]["main"], temp_degree
 
 
-async def paste_to_db(json_data):
+async def paste_to_db(user_id, dict_weather):
     async with Session() as session:
-        print(json_data)
-        for element in json_data:
-            orm_date = Weather(json=element)
-            session.add(orm_date)
+        print(dict_weather)
+        orm_date = Weather(id_user= user_id, city=dict_weather['city'], description=dict_weather['description'], temp=dict_weather['temp'])
+        session.add(orm_date)
+
         await session.commit()
 
-
-tasks = []
-async def main(cities, key):
-
-    # Вставка в базу данных
-    cities_coros = []
-    for city in cities:
-        cities_coros.append(get_weather(city, key))
-    result = await asyncio.gather(*cities_coros)
-    pprint(result)
-
-    # paste_to_db_coros = paste_to_db(result)
-    # task = asyncio.create_task(paste_to_db_coros)
-    # tasks.append(task)
-    #
-    # for task in tasks:
-    #     await task
-
-    # await paste_to_db(result)
-
-
 class WeatherView(web.View):
+
+    @property
+    def session(self):
+        return self.request['session']
+
 
     async def get(self):
         pass
     async def post(self):
         weather_data = await self.request.json()
+
         cities = weather_data['cities']
         key =  weather_data['APPID']
-        await main(cities, key)
+        email = weather_data['email']
+        password = weather_data['password']
 
-        return web.json_response({'answer': 'test'})
+        query = select(Users).where(Users.email == email)
+        result = await self.request["session"].execute(query)
+        user = result.scalar()
+        user_id = user.id
+
+        if await validate(password, user.password):
+            cities_coros = []
+            for city in cities:
+                cities_coros.append(get_weather(city, key))
+            result = await asyncio.gather(*cities_coros)
+
+            tasks, dict_weather = [], {}
+            for element in result:
+                dict_weather['city'] = element[0]
+                dict_weather['description'] = element[1]
+                dict_weather['temp'] = element[2]
+                paste_to_db_coros = paste_to_db(user_id, dict_weather)
+                task = asyncio.create_task(paste_to_db_coros)
+                tasks.append(task)
+
+                for task in tasks:
+                    await task
+
+            return web.json_response({'answer': f'Данные по городам {", ".join(cities)} успешно добавлены в базу'})
+
+        else:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': 'Пользователь не найден'}),
+                content_type='application/json')
+
 
     async def patch(self):
         pass
@@ -133,21 +157,49 @@ class UserView(web.View):
             await self.request['session'].commit()
         except IntegrityError as er:
             raise web.HTTPConflict(
-                text = json.dumps({'answer': 'Пользователь с таким почтовым ящиком уже создан'}),
+                text = json.dumps({'answer': 'Пользователь с таким почтовым адресом уже создан'}),
                 content_type = 'application/json'
             )
         return web.json_response({'answer': f'Пользователь {user.last_name} зарегистрирован!'})
 
     async def patch(self):
-        json_data = await self.request.json()
-        print(json_data)
+        user_data = await self.request.json()
+        old_password = user_data['oldpassword']
+        user = await get_user(self.user_id, self.session)
+        user_password = user.password
+        if await validate(old_password, user_password):
+            user_data['password'] = hash_password(user_data['newpassword'])
+            user_data.pop('oldpassword')
+            user_data.pop('newpassword')
+            for key, value in user_data.items():
+                setattr(user, key, value)
+            await self.request['session'].commit()
+            return web.json_response({'answer': f'Информация по пользователю {user.last_name} успешно обновлена!'})
+        else:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': 'Пользователь не найден'}),
+                content_type='application/json'
+            )
 
-        return web.json_response({'answer': 'answer'})
+    async def delete(self):
+        user_data = await self.request.json()
+        password = user_data['password']
+        user = await get_user(self.user_id, self.session)
+        user_password = user.password
+        if await validate(password, user_password):
+            await self.request["session"].delete(user)
+            await self.request["session"].commit()
+            return web.json_response({"answer": f"Пользователь {user.last_name} успешно удален"})
+        else:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': 'Пользователь не найден'}),
+                content_type='application/json'
+            )
 
 
 app.add_routes([
     web.post('/weather/', WeatherView),
-    web.patch('/weather/', WeatherView),
+    web.patch(r'/weather/', WeatherView),
 
     web.post('/user/', UserView),
     web.get(r'/user/{user_id:\d+}', UserView),
