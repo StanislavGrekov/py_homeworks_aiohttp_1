@@ -1,4 +1,3 @@
-# This is a sample Python script.
 import json
 import asyncpg
 import asyncio
@@ -71,13 +70,11 @@ async def get_weather(city, key):
         return city, json_data["weather"][0]["main"], temp_degree
 
 
-async def paste_to_db(user_id, dict_weather):
-    async with Session() as session:
-        print(dict_weather)
-        orm_date = Weather(id_user= user_id, city=dict_weather['city'], description=dict_weather['description'], temp=dict_weather['temp'])
-        session.add(orm_date)
+async def paste_to_db(user_id, dict_weather, session):
+    orm_date = Weather(id_user= user_id, city=dict_weather['city'], description=dict_weather['description'], temp=dict_weather['temp'])
+    session.add(orm_date)
 
-        await session.commit()
+    await session.commit()
 
 class WeatherView(web.View):
 
@@ -85,9 +82,37 @@ class WeatherView(web.View):
     def session(self):
         return self.request['session']
 
+    @property
+    def weather_id(self):
+        return int(self.request.match_info['weather_id'])
+
 
     async def get(self):
-        pass
+        weather_data = await self.request.json()
+
+        email = weather_data['email']
+
+        try:
+            query = select(Users).where(Users.email == email)
+            result = await self.request["session"].execute(query)
+            user = result.scalar()
+            user_id = user.id
+
+            query = select(Weather).where(Weather.id_user == user_id)
+            result = await self.request["session"].execute(query)
+            answer_list = []
+            for element in result:
+                row = f'№{element[0].id}, город {element[0].city}, описание {element[0].description}, температура {element[0].temp} градусов.'
+                answer_list.append(row)
+
+            return web.json_response({'answer': answer_list})
+
+        except AttributeError:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': ['Пользователь не найден']}),
+                content_type='application/json')
+
+
     async def post(self):
         weather_data = await self.request.json()
 
@@ -112,7 +137,7 @@ class WeatherView(web.View):
                 dict_weather['city'] = element[0]
                 dict_weather['description'] = element[1]
                 dict_weather['temp'] = element[2]
-                paste_to_db_coros = paste_to_db(user_id, dict_weather)
+                paste_to_db_coros = paste_to_db(user_id, dict_weather, self.session)
                 task = asyncio.create_task(paste_to_db_coros)
                 tasks.append(task)
 
@@ -127,11 +152,36 @@ class WeatherView(web.View):
                 content_type='application/json')
 
 
-    async def patch(self):
-        pass
-
     async def delete(self):
-        pass
+        user_data = await self.request.json()
+        id_row = self.weather_id
+        email = user_data['email']
+        password = user_data['password']
+
+        try:
+            query = select(Users).where(Users.email == email)
+            result = await self.request["session"].execute(query)
+            user = result.scalar()
+            user_password = user.password
+
+            if await validate(password, user_password):
+                query = select(Weather).where(Weather.id_user == user.id)
+                result = await self.request["session"].execute(query)
+                id_list = []
+                for element in result:
+                    id_list.append(element[0].id)
+
+                if id_row in id_list:
+                    weather_row = await self.session.get(Weather, id_row)
+                    await self.request["session"].delete(weather_row)
+                    await self.request["session"].commit()
+                    return web.json_response({'answer': f'Строка {weather_row.id} успешно удалена'})
+
+        except AttributeError:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': 'Пользователь не найден'}),
+                content_type='application/json')
+
 
 
 class UserView(web.View):
@@ -199,7 +249,8 @@ class UserView(web.View):
 
 app.add_routes([
     web.post('/weather/', WeatherView),
-    web.patch(r'/weather/', WeatherView),
+    web.get('/weather/', WeatherView),
+    web.delete(r'/weather/{weather_id:\d+}',  WeatherView),
 
     web.post('/user/', UserView),
     web.get(r'/user/{user_id:\d+}', UserView),

@@ -37,4 +37,5 @@ class Weather(Base):
     temp = Column(Integer)
     created_fild=Column(DateTime, server_default=func.now())
 
-
+    def __str__(self):
+        return f"{self.id}, {self.city}, {self.description}, {self.temp}, {self.created_fild}"

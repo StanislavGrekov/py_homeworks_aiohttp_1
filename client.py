@@ -1,8 +1,9 @@
 import aiohttp
 import asyncio
 
-# Города по которым необходимо получить данные о погоде
+# Города, по которым необходимо получить данные о погоде
 cities = ['Poletayevo', 'Miass', 'Chelyabinsk']
+# Ключ для работы сервиса openweathermap
 key = '2a4ff86f9aaa70041ec8e82db64abf56'
 
 # async def main():
@@ -21,29 +22,29 @@ key = '2a4ff86f9aaa70041ec8e82db64abf56'
 
 async def main():
     async with aiohttp.ClientSession() as client:
-        # Создание пользователя
+        #Создание пользователя
         # response = await client.post('http://127.0.0.1:8080/user/',
-        #                              json={'email': 'stason@yandex.ru',
+        #                              json={'email': 'dimon@yandex.ru',
         #                                 'password': '12345678',
-        #                                 'first_name': 'Stas',
-        #                                 'last_name': 'Grekov'})
+        #                                 'first_name': 'Дмитрий',
+        #                                 'last_name': 'Дмитриев'})
         #
         # data = await response.json()
         # print(data['answer'])
 
         # Получение пользователя
-        # response = await client.get('http://127.0.0.1:8080/user/2')
+        # response = await client.get('http://127.0.0.1:8080/user/7')
         #
         # data = await response.json()
         # print(data['answer'])
 
         # Редактирование пользователя
-        # response = await client.patch('http://127.0.0.1:8080/user/2',
-        #                              json={'email': 'semenov@yandex.ru',
+        # response = await client.patch('http://127.0.0.1:8080/user/7',
+        #                              json={'email': 'dimon@yandex.ru',
         #                                 'oldpassword': '12345678',
         #                                 'newpassword': 'password',
-        #                                 'first_name': 'Семен',
-        #                                 'last_name': 'Cеменов'})
+        #                                 'first_name': 'Дмитрий',
+        #                                 'last_name': 'Дмитриев'})
         #
         # data = await response.json()
         # print(data['answer'])
@@ -56,13 +57,31 @@ async def main():
         # data = await response.json()
         # print(data['answer'])
 
-        response = await client.post('http://127.0.0.1:8080/weather/',
-                                     json={'cities': cities,
-                                           'APPID': key,
-                                           'email': 'stason@yandex.ru',
-                                            'password': '1234567898',
-                                           })
+        # Создание записей в БД, содержащих данные о погоде в указаных городах
+        # response = await client.post('http://127.0.0.1:8080/weather/',
+        #                              json={'cities': cities,
+        #                                    'APPID': key,
+        #                                    'email': 'dimon@yandex.ru',
+        #                                     'password': '12345678',
+        #                                    })
+        # data = await response.json()
+        # print(data['answer'])
+
+        # Получение даyных о погоде из БД по email
+        # response = await client.get('http://127.0.0.1:8080/weather/',
+        #                              json={
+        #                                    'email': 'dimon@yandex.ru',
+        #                                    })
+        # data = await response.json()
+        # for element in data['answer']:
+        #     print(element)
+
+        # Удаление записей о погоде
+        response = await client.delete('http://127.0.0.1:8080/weather/9',
+                                       json={'email': 'dimon@yandex.ru',
+                                             'password': '12345678',})
+
         data = await response.json()
-        print(data)
+        print(data['answer'])
 
 asyncio.run(main())
