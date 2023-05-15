@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm.session import sessionmaker
 from sqlalchemy.orm import relationship
-from sqlalchemy import Integer, Column, String, DateTime, func, ForeignKey
+from sqlalchemy import Integer, Column, String, DateTime, func, ForeignKey, Text
 from sqlalchemy_utils import EmailType
 
 PG_DSN = 'postgresql+asyncpg://postgres:masterkey@localhost:5432/aiohttp'
@@ -25,17 +25,16 @@ class Users(Base):
         return f"{self.id}, {self.email}, {self.registration_date}, {self.password}, {self.first_name}, {self.last_name}"
 
 
-class Weather(Base):
+class Advertisement(Base):
 
-    __tablename__ = 'weather'
+    __tablename__ = 'advertisement'
 
     id = Column(Integer, primary_key=True)
     id_user = Column(Integer, ForeignKey('users.id'), nullable=False)
-    users = relationship(Users, backref='weather')
-    city = Column(String(length=50))
-    description = Column(String(length=50))
-    temp = Column(Integer)
+    users = relationship(Users, backref='advertisement')
+    title = Column(String(length=50))
+    description = Column(Text)
     created_fild=Column(DateTime, server_default=func.now())
 
     def __str__(self):
-        return f"{self.id}, {self.city}, {self.description}, {self.temp}, {self.created_fild}"
+        return f"{self.id}, {self.id_user}, {self.title}, {self.description}, {self.created_fild}"

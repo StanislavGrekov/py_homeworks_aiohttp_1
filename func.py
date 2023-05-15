@@ -1,6 +1,6 @@
 import json
 import aiohttp
-from models import Base, Weather, Session, engine, Users
+from models import Base, Advertisement, Session, engine, Users
 from aiohttp import web
 from bcrypt import hashpw, gensalt, checkpw
 
@@ -40,8 +40,8 @@ async def get_weather(city, key):
         return city, json_data["weather"][0]["main"], temp_degree
 
 
-async def paste_to_db(user_id, dict_weather, session):
-    orm_date = Weather(id_user= user_id, city=dict_weather['city'], description=dict_weather['description'], temp=dict_weather['temp'])
+async def paste_to_db(user_id, advertisement_data, session):
+    orm_date = Advertisement(id_user= user_id, title=advertisement_data['title'], description=advertisement_data['description'])
     session.add(orm_date)
 
     await session.commit()

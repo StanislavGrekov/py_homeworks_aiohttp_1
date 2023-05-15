@@ -1,22 +1,17 @@
 import aiohttp
 import asyncio
 
-# Города, по которым можно получить данные о погоде
-cities = ['Poletayevo', 'Miass', 'Chelyabinsk']
-# Ключ для работы сервиса Openweathermap
-key = '2a4ff86f9aaa70041ec8e82db64abf56'
-
 async def main():
     async with aiohttp.ClientSession() as client:
         #1.Создание пользователя
-        response = await client.post('http://127.0.0.1:8080/user/',
-                                     json={'email': 'dimon@yandex.ru',
-                                        'password': '12345678',
-                                        'first_name': 'Дмитрий',
-                                        'last_name': 'Дмитриев'})
-
-        data = await response.json()
-        print(data['answer'])
+        # response = await client.post('http://127.0.0.1:8080/user/',
+        #                              json={'email': 'dimon@yandex.ru',
+        #                                 'password': '12345678',
+        #                                 'first_name': 'Дмитрий',
+        #                                 'last_name': 'Дмитриев'})
+        #
+        # data = await response.json()
+        # print(data['answer'])
 
         # 2.Получение данных пользователя
         # response = await client.get('http://127.0.0.1:8080/user/3')
@@ -45,8 +40,8 @@ async def main():
 
         # 5.Создание записей в БД, содержащих данные о погоде в указаных городах
         # response = await client.post('http://127.0.0.1:8080/weather/',
-        #                              json={'cities': cities,
-        #                                    'APPID': key,
+        #                              json={'title': "Продам холодильник",
+        #                                    'description': "Продам хороший советский холодильник Полюс-10 КШ-260",
         #                                    'email': 'dimon@yandex.ru',
         #                                     'password': '12345678',
         #                                    })
@@ -54,11 +49,12 @@ async def main():
         # print(data['answer'])
 
         # 6.Получение даyных о погоде из БД по email
-        # response = await client.get('http://127.0.0.1:8080/weather/',
-        #                              json={
-        #                                    'email': 'dimon@yandex.ru',
-        #                                    })
-        # data = await response.json()
+        response = await client.get('http://127.0.0.1:8080/weather/',
+                                     json={
+                                           'email': 'dimon@yandex.ru',
+                                           })
+        data = await response.json()
+        print(data)
         # for element in data['answer']:
         #     print(element)
 
