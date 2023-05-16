@@ -1,6 +1,5 @@
 import json
-import aiohttp
-from models import Base, Advertisement, Session, engine, Users
+from models import  Advertisement, Users
 from aiohttp import web
 from bcrypt import hashpw, gensalt, checkpw
 
@@ -28,16 +27,6 @@ async def validate(old_password, user_password):
         return True
     else:
         return False
-
-
-async def get_weather(city, key):
-    async with aiohttp.ClientSession() as client:
-        response = await client.get(f'http://api.openweathermap.org/data/2.5/weather', params = {'q': city, 'APPID': key})
-        json_data = await response.json()
-        temp_degree = round((json_data["main"]["temp"] - 273), 1)
-        # print(f'{city}: {json_data["weather"][0]["main"]}, температура - {round(temp_degree, 1)}')
-
-        return city, json_data["weather"][0]["main"], temp_degree
 
 
 async def paste_to_db(user_id, advertisement_data, session):

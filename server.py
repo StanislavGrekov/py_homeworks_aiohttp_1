@@ -1,11 +1,10 @@
 import json
-import asyncio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
 from models import Base, Advertisement, Session, engine, Users
 from aiohttp import web
 
-from func import hash_password, get_user, validate, get_weather, paste_to_db
+from func import hash_password, get_user, validate, paste_to_db
 
 
 async def orm_context(app):
@@ -37,8 +36,8 @@ class AdvertisementView(web.View):
         return self.request['session']
 
     @property
-    def weather_id(self):
-        return int(self.request.match_info['weather_id'])
+    def adv_id(self):
+        return int(self.request.match_info['adv_id'])
 
 
     async def get(self):
@@ -51,32 +50,15 @@ class AdvertisementView(web.View):
             result = await self.request["session"].execute(query)
             user = result.scalar()
             user_id = user.id
-            print(user_id)
-            query = select().where(Advertisement.id_user == user_id)
+
+            query = select(Advertisement).where(Advertisement.id_user == user_id)
             result = await self.request["session"].execute(query)
-            adv = result.scalar()
-            adv_id = adv.id
-
-            print(adv_id)
-
-            # answer_list = []
-            # user = result.scalar()
-            # print(user)
-            # print(user)
-            # for row in result:
-            #     print(row['id'])
-
-            # for element in result:
-            #     print(element.id)
-                # row = f'№{element.id}, Заголовок: {element.title}, описание: {element.description}.'
-                # print(row)
-                # answer_list.append(row)
-
-            # for element in result:
-            #     row = f'№{element[0].id}, Заголовок: {element[0].title}, описание: {element[0].description}, дата создания: {element[0].created_fild}.'
-            #     answer_list.append(row)
-            await self.request["session"].commit()
-            return web.json_response({'answer': 1})
+            answer_list = []
+            for row in result:
+                row = f'№{row[0].id}, заголовок: {row[0].title}, описание: {row[0].description}, создано: {row[0].created_fild}'
+                print(row)
+                answer_list.append(row)
+            return web.json_response({'answer': answer_list})
 
         except AttributeError:
             raise web.HTTPNotFound(
@@ -105,67 +87,42 @@ class AdvertisementView(web.View):
                 content_type='application/json')
 
 
-        # if await validate(password, user.password):
-        #     cities_coros = []
-        #     for city in cities:
-        #         cities_coros.append(get_weather(city, key))
-        #     result = await asyncio.gather(*cities_coros)
-        #
-        #     tasks, dict_weather = [], {}
-        #     for element in result:
-        #         dict_weather['city'] = element[0]
-        #         dict_weather['description'] = element[1]
-        #         dict_weather['temp'] = element[2]
-        #         paste_to_db_coros = paste_to_db(user_id, dict_weather, self.session)
-        #         task = asyncio.create_task(paste_to_db_coros)
-        #         tasks.append(task)
-        #
-        #         for task in tasks:
-        #             await task
-        #
-        #     return web.json_response({'answer': f'Данные по городам {", ".join(cities)} успешно добавлены в базу'})
-        #
-        # else:
-        #     raise web.HTTPNotFound(
-        #         text=json.dumps({'answer': 'Пользователь не найден'}),
-        #         content_type='application/json')
-
-
     async def delete(self):
-        # user_data = await self.request.json()
-        # id_row = self.weather_id
-        # email = user_data['email']
-        # password = user_data['password']
-        #
-        # try:
-        #     query = select(Users).where(Users.email == email)
-        #     result = await self.request["session"].execute(query)
-        #     user = result.scalar()
-        #     user_password = user.password
-        #
-        #     if await validate(password, user_password):
-        #         query = select(Weather).where(Weather.id_user == user.id)
-        #         result = await self.request["session"].execute(query)
-        #         id_list = []
-        #         for element in result:
-        #             id_list.append(element[0].id)
-        #
-        #         if id_row in id_list:
-        #             weather_row = await self.session.get(Weather, id_row)
-        #             await self.request["session"].delete(weather_row)
-        #             await self.request["session"].commit()
-        #             return web.json_response({'answer': f'Строка {weather_row.id} успешно удалена'})
-        #         else:
-        #             return web.json_response({'answer': 'Указанной строки нет в БД'})
-        #     else:
-        #         return web.json_response({'answer': 'Пароль не подходит'})
-        #
-        #
-        # except AttributeError:
-        #     raise web.HTTPNotFound(
-        #         text=json.dumps({'answer': 'Пользователь не найден'}),
-        #         content_type='application/json')
-        pass
+        user_data = await self.request.json()
+        id_row = self.adv_id
+
+        email = user_data['email']
+        password = user_data['password']
+
+        try:
+            query = select(Users).where(Users.email == email)
+            result = await self.request["session"].execute(query)
+            user = result.scalar()
+            user_password = user.password
+
+            if await validate(password, user_password):
+                query = select(Advertisement).where(Advertisement.id_user == user.id)
+                result = await self.request["session"].execute(query)
+                id_list = []
+                for element in result:
+                    id_list.append(element[0].id)
+
+                if id_row in id_list:
+                    adv_row = await self.session.get(Advertisement, id_row)
+                    await self.request["session"].delete(adv_row)
+                    await self.request["session"].commit()
+                    return web.json_response({'answer': f'Объявление №{adv_row.id} успешно удалено'})
+                else:
+                    return web.json_response({'answer': 'Указанного объявления нет в БД'})
+            else:
+                return web.json_response({'answer': 'Пароль неверен'})
+
+
+        except AttributeError:
+            raise web.HTTPNotFound(
+                text=json.dumps({'answer': 'Пользователь не найден'}),
+                content_type='application/json')
+
 
 
 class UserView(web.View):
@@ -232,9 +189,9 @@ class UserView(web.View):
 
 
 app.add_routes([
-    web.post('/weather/', AdvertisementView),
-    web.get('/weather/', AdvertisementView),
-    web.delete(r'/weather/{weather_id:\d+}',  AdvertisementView),
+    web.post('/adv/', AdvertisementView),
+    web.get('/adv/', AdvertisementView),
+    web.delete(r'/adv/{adv_id:\d+}',  AdvertisementView),
 
     web.post('/user/', UserView),
     web.get(r'/user/{user_id:\d+}', UserView),
@@ -245,6 +202,9 @@ app.add_routes([
 ])
 
 web.run_app(app)
+
+
+
 
 
 
